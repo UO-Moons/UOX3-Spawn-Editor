@@ -1,3 +1,9 @@
+[![GitHub release](https://img.shields.io/github/v/release/UO-Moons/UOX3-Spawn-Editor)](https://github.com/UO-Moons/UOX3-Spawn-Editor/releases)
+[![License](https://img.shields.io/github/license/UO-Moons/UOX3-Spawn-Editor)](https://github.com/UO-Moons/UOX3-Spawn-Editor/blob/main/LICENSE)
+[![Downloads](https://img.shields.io/github/downloads/UO-Moons/UOX3-Spawn-Editor/total)](https://github.com/UO-Moons/UOX3-Spawn-Editor/releases)
+[![Platform](https://img.shields.io/badge/platform-Windows-lightgrey)](https://github.com/UO-Moons/UOX3-Spawn-Editor)
+[![UOX3](https://img.shields.io/badge/UOX3-compatible-purple)](https://www.uox3.org/)
+
 # UOX3 Spawn Editor
 
 A modern, map-based spawn region editor for UOX3 designed to simplify creation, editing, and management of spawn systems across multiple worlds.
