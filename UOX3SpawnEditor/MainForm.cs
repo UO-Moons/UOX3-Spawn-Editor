@@ -9,7 +9,7 @@ using System.Threading.Tasks;
 using System.Windows.Forms;
 using static System.Runtime.InteropServices.JavaScript.JSType;
 
-namespace UOX3SpawnAtlas
+namespace UOX3SpawnEditor
 {
     public partial class MainForm : Form
     {
@@ -192,7 +192,7 @@ namespace UOX3SpawnAtlas
 
             try
             {
-                using (MemoryStream stream = new MemoryStream(Properties.Resources.UOX3SpawnAtlas))
+                using (MemoryStream stream = new MemoryStream(Properties.Resources.UOX3SpawnEditor))
                 {
                     this.Icon = new Icon(stream);
                 }
@@ -4587,11 +4587,14 @@ namespace UOX3SpawnAtlas
         {
             try
             {
-                string manifestUrl = "https://distantlanduo.com/spawnupdater/version.json";
+                string latestReleaseApiUrl = "https://api.github.com/repos/UO-Moons/UOX3-Spawn-Editor/releases/latest";
                 string currentVersion = AppVersionHelper.GetCurrentVersion();
 
-                UpdateManifest manifest = UpdateService.GetManifest(manifestUrl);
+                UpdateManifest manifest = UpdateService.GetManifest(latestReleaseApiUrl);
                 if (manifest == null)
+                    return;
+
+                if (string.IsNullOrWhiteSpace(manifest.DownloadUrl))
                     return;
 
                 if (!UpdateService.IsUpdateAvailable(currentVersion, manifest.LatestVersion))
@@ -4601,7 +4604,9 @@ namespace UOX3SpawnAtlas
                     "A new version is available.\n\n" +
                     "Current Version: " + currentVersion + "\n" +
                     "Latest Version: " + manifest.LatestVersion + "\n\n" +
-                    "Changes:\n" + (manifest.Changelog ?? "No changelog provided.") + "\n\n" +
+                    "Asset: " + manifest.AssetName + "\n" +
+                    "Downloads: " + manifest.DownloadCount + "\n\n" +
+                    "Changes:\n" + (string.IsNullOrWhiteSpace(manifest.Changelog) ? "No changelog provided." : manifest.Changelog) + "\n\n" +
                     "Do you want to update now?",
                     "Update Available",
                     MessageBoxButtons.YesNo,
@@ -4611,15 +4616,15 @@ namespace UOX3SpawnAtlas
                 if (result != DialogResult.Yes)
                     return;
 
-                LaunchUpdater(manifestUrl);
+                LaunchUpdater(manifest.DownloadUrl);
             }
             catch
             {
-                // fail quietly for now
+                // Fail quietly for now
             }
         }
 
-        private void LaunchUpdater(string downloadUrl)
+        private void LaunchUpdater(string releaseZipUrl)
         {
             string appPath = Application.ExecutablePath;
             string updaterPath = Path.Combine(Application.StartupPath, "UOX3SpawnEditorUpdater.exe");
@@ -4639,7 +4644,7 @@ namespace UOX3SpawnAtlas
 
             System.Diagnostics.Process.Start(
                 updaterPath,
-                "\"" + appPath + "\" \"" + downloadUrl + "\""
+                "\"" + appPath + "\" \"" + releaseZipUrl + "\""
             );
 
             Application.Exit();

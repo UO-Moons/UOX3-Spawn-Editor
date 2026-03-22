@@ -4,7 +4,7 @@
     <TargetFramework>net9.0-windows7.0</TargetFramework>
     <UseWindowsForms>true</UseWindowsForms>
     <Nullable>enable</Nullable>
-    <ApplicationIcon>UOX3SpawnAtlas.ico</ApplicationIcon>
+    <ApplicationIcon>UOX3SpawnEditor.ico</ApplicationIcon>
     <BaseOutputPath></BaseOutputPath>
     <AssemblyVersion>0.2.5.0</AssemblyVersion>
     <FileVersion>0.2.5.0</FileVersion>
@@ -12,7 +12,7 @@
     <InformationalVersion>0.2.5</InformationalVersion>
   </PropertyGroup>
   <ItemGroup>
-    <Content Include="UOX3SpawnAtlas.ico" />
+    <Content Include="UOX3SpawnEditor.ico" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />

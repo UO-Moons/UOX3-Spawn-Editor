@@ -1,7 +1,7 @@
 ﻿using System.Collections.Generic;
 using System.Drawing;
 
-namespace UOX3SpawnAtlas
+namespace UOX3SpawnEditor
 {
     public class SpawnRegion
     {

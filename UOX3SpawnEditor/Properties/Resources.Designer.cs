@@ -8,7 +8,7 @@
 // </auto-generated>
 //------------------------------------------------------------------------------
 
-namespace UOX3SpawnAtlas.Properties {
+namespace UOX3SpawnEditor.Properties {
     using System;
     
     
@@ -39,7 +39,7 @@ namespace UOX3SpawnAtlas.Properties {
         internal static global::System.Resources.ResourceManager ResourceManager {
             get {
                 if (object.ReferenceEquals(resourceMan, null)) {
-                    global::System.Resources.ResourceManager temp = new global::System.Resources.ResourceManager("UOX3SpawnAtlas.Properties.Resources", typeof(Resources).Assembly);
+                    global::System.Resources.ResourceManager temp = new global::System.Resources.ResourceManager("UOX3SpawnEditor.Properties.Resources", typeof(Resources).Assembly);
                     resourceMan = temp;
                 }
                 return resourceMan;
@@ -63,9 +63,9 @@ namespace UOX3SpawnAtlas.Properties {
         /// <summary>
         ///   Looks up a localized resource of type System.Byte[].
         /// </summary>
-        internal static byte[] UOX3SpawnAtlas {
+        internal static byte[] UOX3SpawnEditor {
             get {
-                object obj = ResourceManager.GetObject("UOX3SpawnAtlas", resourceCulture);
+                object obj = ResourceManager.GetObject("UOX3SpawnEditor", resourceCulture);
                 return ((byte[])(obj));
             }
         }

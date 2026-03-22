@@ -1,22 +1,11 @@
-﻿using Newtonsoft.Json;
-using System;
-using System.Collections.Generic;
+﻿using System;
 using System.Diagnostics;
 using System.IO;
-using System.Net;
+using System.IO.Compression;
 using System.Threading;
 
 namespace UOX3SpawnEditorUpdater
 {
-    internal class UpdateManifest
-    {
-        public string LatestVersion { get; set; }
-        public string Changelog { get; set; }
-        public bool Mandatory { get; set; }
-        public string BaseUrl { get; set; }
-        public List<string> Files { get; set; }
-    }
-
     internal static class Program
     {
         [STAThread]
@@ -28,110 +17,81 @@ namespace UOX3SpawnEditorUpdater
                     return;
 
                 string targetExePath = args[0];
-                string manifestUrl = args[1];
+                string releaseZipUrl = args[1];
+
+                if (string.IsNullOrWhiteSpace(targetExePath) || string.IsNullOrWhiteSpace(releaseZipUrl))
+                    return;
 
                 string installFolderPath = Path.GetDirectoryName(targetExePath);
                 if (string.IsNullOrWhiteSpace(installFolderPath))
                     return;
 
                 string tempFolderPath = Path.Combine(Path.GetTempPath(), "UOX3SpawnEditorUpdate");
+                string zipFilePath = Path.Combine(tempFolderPath, "update.zip");
+                string extractFolderPath = Path.Combine(tempFolderPath, "extracted");
 
                 if (Directory.Exists(tempFolderPath))
                     Directory.Delete(tempFolderPath, true);
 
                 Directory.CreateDirectory(tempFolderPath);
+                Directory.CreateDirectory(extractFolderPath);
 
                 if (!WaitForProcessToExit(targetExePath))
                     return;
 
-                UpdateManifest manifest = DownloadManifest(manifestUrl);
-                if (manifest == null)
-                    return;
+                DownloadReleaseZip(releaseZipUrl, zipFilePath);
+                ZipFile.ExtractToDirectory(zipFilePath, extractFolderPath);
 
-                if (string.IsNullOrWhiteSpace(manifest.BaseUrl))
-                    return;
-
-                if (manifest.Files == null || manifest.Files.Count == 0)
-                    return;
-
-                DownloadAllFiles(manifest, tempFolderPath);
-                CopyAllFilesToInstallFolder(manifest, tempFolderPath, installFolderPath);
+                CopyReleaseFilesToInstallFolder(extractFolderPath, installFolderPath);
 
                 Thread.Sleep(500);
 
                 ProcessStartInfo processStartInfo = new ProcessStartInfo();
                 processStartInfo.FileName = targetExePath;
-                processStartInfo.WorkingDirectory = Path.GetDirectoryName(targetExePath);
+                processStartInfo.WorkingDirectory = installFolderPath;
                 processStartInfo.UseShellExecute = true;
 
                 Process.Start(processStartInfo);
             }
             catch (Exception exception)
             {
-                File.WriteAllText( Path.Combine(Path.GetTempPath(), "UOX3SpawnEditorUpdaterError.txt"), exception.ToString() );
-                return;
+                File.WriteAllText(
+                    Path.Combine(Path.GetTempPath(), "UOX3SpawnEditorUpdaterError.txt"),
+                    exception.ToString()
+                );
             }
         }
 
-        private static UpdateManifest DownloadManifest(string manifestUrl)
+        private static void DownloadReleaseZip(string releaseZipUrl, string zipFilePath)
         {
-            using (WebClient webClient = new WebClient())
+            using (System.Net.WebClient webClient = new System.Net.WebClient())
             {
                 webClient.Headers.Add("Cache-Control", "no-cache");
-                string json = webClient.DownloadString(manifestUrl);
-                return JsonConvert.DeserializeObject<UpdateManifest>(json);
+                webClient.Headers.Add("User-Agent", "UOX3SpawnEditor-Updater");
+                webClient.DownloadFile(releaseZipUrl, zipFilePath);
             }
         }
 
-        private static void DownloadAllFiles(UpdateManifest manifest, string tempFolderPath)
+        private static void CopyReleaseFilesToInstallFolder(string extractFolderPath, string installFolderPath)
         {
-            string cleanBaseUrl = manifest.BaseUrl.TrimEnd('/', '\\');
-
-            using (WebClient webClient = new WebClient())
+            foreach (string sourceFilePath in Directory.GetFiles(extractFolderPath, "*", SearchOption.AllDirectories))
             {
-                webClient.Headers.Add("Cache-Control", "no-cache");
+                string relativePath = sourceFilePath.Substring(extractFolderPath.Length)
+                    .TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
 
-                foreach (string fileName in manifest.Files)
-                {
-                    if (string.IsNullOrWhiteSpace(fileName))
-                        continue;
-
-                    string cleanFileName = fileName.Replace("/", "\\").TrimStart('\\');
-                    string fileUrl = cleanBaseUrl + "/" + cleanFileName.Replace("\\", "/");
-                    string tempFilePath = Path.Combine(tempFolderPath, cleanFileName);
-                    string tempFileFolderPath = Path.GetDirectoryName(tempFilePath);
-
-                    if (!string.IsNullOrWhiteSpace(tempFileFolderPath) && !Directory.Exists(tempFileFolderPath))
-                        Directory.CreateDirectory(tempFileFolderPath);
-
-                    webClient.DownloadFile(fileUrl, tempFilePath);
-                }
-            }
-        }
-
-        private static void CopyAllFilesToInstallFolder(UpdateManifest manifest, string tempFolderPath, string installFolderPath)
-        {
-            foreach (string fileName in manifest.Files)
-            {
-                if (string.IsNullOrWhiteSpace(fileName))
+                if (string.IsNullOrWhiteSpace(relativePath))
                     continue;
 
-                string cleanFileName = fileName.Replace("/", "\\").TrimStart('\\');
-
-                if (cleanFileName.Equals("UOX3SpawnEditorUpdater.exe", StringComparison.OrdinalIgnoreCase))
+                if (relativePath.Equals("UOX3SpawnEditorUpdater.exe", StringComparison.OrdinalIgnoreCase))
                     continue;
 
-                string tempFilePath = Path.Combine(tempFolderPath, cleanFileName);
-                string destinationFilePath = Path.Combine(installFolderPath, cleanFileName);
+                string destinationFilePath = Path.Combine(installFolderPath, relativePath);
                 string destinationFolderPath = Path.GetDirectoryName(destinationFilePath);
-
-                if (!File.Exists(tempFilePath))
-                    throw new FileNotFoundException("Downloaded file not found.", tempFilePath);
 
                 if (!string.IsNullOrWhiteSpace(destinationFolderPath) && !Directory.Exists(destinationFolderPath))
                     Directory.CreateDirectory(destinationFolderPath);
 
-                File.Copy(tempFilePath, destinationFilePath, true);
+                File.Copy(sourceFilePath, destinationFilePath, true);
             }
         }
 

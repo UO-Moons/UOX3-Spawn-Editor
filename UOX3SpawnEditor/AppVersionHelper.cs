@@ -1,6 +1,6 @@
 ﻿using System.Reflection;
 
-namespace UOX3SpawnAtlas
+namespace UOX3SpawnEditor
 {
     public static class AppVersionHelper
     {

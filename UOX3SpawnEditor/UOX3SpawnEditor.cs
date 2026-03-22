@@ -1,9 +1,9 @@
 ﻿using System;
 using System.Windows.Forms;
 
-namespace UOX3SpawnAtlas
+namespace UOX3SpawnEditor
 {
-    internal static class UOX3SpawnAtlas
+    internal static class UOX3SpawnEditor
     {
         [STAThread]
         static void Main()

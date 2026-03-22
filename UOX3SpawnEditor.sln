@@ -2,7 +2,7 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "UOX3SpawnAtlas", "UOX3SpawnAtlas\UOX3SpawnAtlas.csproj", "{8A35D4A6-4A3E-4C9C-94D1-87A8B82926C7}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "UOX3SpawnEditor", "UOX3SpawnEditor\UOX3SpawnEditor.csproj", "{8A35D4A6-4A3E-4C9C-94D1-87A8B82926C7}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "UOX3SpawnEditorUpdater", "UOX3SpawnEditorUpdater\UOX3SpawnEditorUpdater.csproj", "{C8932A02-5623-4A66-93FB-2EAFF971F6AF}"
 EndProject

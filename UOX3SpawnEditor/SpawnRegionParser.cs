@@ -4,7 +4,7 @@ using System.Drawing;
 using System.IO;
 using System.Linq;
 
-namespace UOX3SpawnAtlas
+namespace UOX3SpawnEditor
 {
     public static class SpawnRegionParser
     {
