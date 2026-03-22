@@ -1,6 +1,7 @@
-[![Version](https://img.shields.io/badge/version-v0.2.5-blue)](https://github.com/UO-Moons/UOX3-Spawn-Editor/releases)
-[![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
-[![Platform](https://img.shields.io/badge/platform-Windows-lightgrey)]()
+[![GitHub release](https://img.shields.io/github/v/release/UO-Moons/UOX3-Spawn-Editor)](https://github.com/UO-Moons/UOX3-Spawn-Editor/releases)
+[![License](https://img.shields.io/github/license/UO-Moons/UOX3-Spawn-Editor)](https://github.com/UO-Moons/UOX3-Spawn-Editor/blob/main/LICENSE)
+[![Downloads](https://img.shields.io/github/downloads/UO-Moons/UOX3-Spawn-Editor/total)](https://github.com/UO-Moons/UOX3-Spawn-Editor/releases)
+[![Platform](https://img.shields.io/badge/platform-Windows-lightgrey)](https://github.com/UO-Moons/UOX3-Spawn-Editor)
 [![UOX3](https://img.shields.io/badge/UOX3-compatible-purple)](https://www.uox3.org/)
 
 # UOX3 Spawn Editor
