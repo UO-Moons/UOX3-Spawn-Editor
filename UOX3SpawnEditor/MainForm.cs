@@ -189,6 +189,7 @@ namespace UOX3SpawnEditor
         public MainForm()
         {
             InitializeComponent();
+            InitializeStaticFilterUI();
 
             try
             {
@@ -653,6 +654,8 @@ namespace UOX3SpawnEditor
             }
 
             ApplyTheme();
+            ApplyStaticFilterFromUI();
+            InitializeStaticFilterUI();
 
             if (Enum.IsDefined(typeof(LabelDisplayMode), settings.LabelDisplayMode))
                 labelDisplayMode = (LabelDisplayMode)settings.LabelDisplayMode;
@@ -668,8 +671,30 @@ namespace UOX3SpawnEditor
                     if (!File.Exists(entry.Value))
                         continue;
 
-                    Image mapImage = Image.FromFile(entry.Value);
-                    worldMaps[entry.Key] = mapImage;
+                    string extension = Path.GetExtension(entry.Value);
+
+                    if (UOMapBitmapLoader.IsSupportedMapDataFile(entry.Value))
+                    {
+                        string clientFolderPath = Path.GetDirectoryName(entry.Value);
+                        string radarColorPath = string.IsNullOrWhiteSpace(clientFolderPath)
+                            ? string.Empty
+                            : Path.Combine(clientFolderPath, "radarcol.mul");
+
+                        if (!File.Exists(radarColorPath))
+                            continue;
+
+                        Bitmap renderedBitmap = UOMapBitmapLoader.LoadMapBitmap(entry.Value, radarColorPath, entry.Key, 3000);
+                        if (renderedBitmap == null)
+                            continue;
+
+                        worldMaps[entry.Key] = renderedBitmap;
+                    }
+                    else
+                    {
+                        Image mapImage = Image.FromFile(entry.Value);
+                        worldMaps[entry.Key] = mapImage;
+                    }
+
                     worldMapPaths[entry.Key] = entry.Value;
                 }
 
@@ -677,9 +702,7 @@ namespace UOX3SpawnEditor
 
                 if (worldMaps.Count > 0)
                 {
-                    currentWorld = worldMaps.Keys.Min();
-                    pictureBox1.Image = worldMaps[currentWorld];
-                    originalImage = worldMaps[currentWorld] as Bitmap;
+                    SetCurrentWorldImage(worldMaps.Keys.Min());
                 }
             }
 
@@ -1103,6 +1126,69 @@ namespace UOX3SpawnEditor
             return "[" + spawnRegion.RegionNum + "] " + spawnRegion.Name + " - " + spawnRegion.GetSpawnSource() + " - {" + sourceFile + "}";
         }
 
+        private void SetCurrentWorldImage(int worldNumber)
+        {
+            currentWorld = worldNumber;
+
+            if (worldMaps.ContainsKey(currentWorld))
+            {
+                pictureBox1.Image = worldMaps[currentWorld];
+                originalImage = worldMaps[currentWorld] as Bitmap;
+            }
+            else
+            {
+                pictureBox1.Image = null;
+                originalImage = null;
+            }
+        }
+
+        private void LoadWorldMapImage(int worldNumber, string filePath)
+        {
+            Image mapImage = Image.FromFile(filePath);
+
+            if (worldMaps.ContainsKey(worldNumber))
+                worldMaps[worldNumber].Dispose();
+
+            worldMaps[worldNumber] = mapImage;
+            worldMapPaths[worldNumber] = filePath;
+            SetCurrentWorldImage(worldNumber);
+        }
+
+        private void LoadUOClientMapsFromFolder(string clientFolderPath)
+        {
+            ApplyStaticFilterFromUI();
+
+            if (string.IsNullOrWhiteSpace(clientFolderPath) || !Directory.Exists(clientFolderPath))
+                return;
+
+            Dictionary<int, Bitmap> loadedMaps = UOMapBitmapLoader.LoadMapsFromFolder(clientFolderPath, 3000);
+
+            if (loadedMaps.Count == 0)
+            {
+                MessageBox.Show(
+                    "Could not find any supported map.mul or mapLegacyMUL.uop files with radarcol.mul in:" + clientFolderPath, "Load UO Client Maps",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Information
+                );
+                return;
+            }
+
+            DisposeLoadedMaps();
+
+            foreach (KeyValuePair<int, Bitmap> entry in loadedMaps)
+            {
+                worldMaps[entry.Key] = entry.Value;
+                worldMapPaths[entry.Key] = UOMapBitmapLoader.FindMapFilePath(clientFolderPath, entry.Key);
+            }
+
+            currentWorld = worldMaps.Keys.Min();
+            SetCurrentWorldImage(currentWorld);
+            RebuildWorldMapSelector();
+            UpdateSpawnRegionListUI();
+            pictureBox1.Invalidate();
+            SaveSettings();
+        }
+
         private void LoadImage(string filePath)
         {
             originalImage?.Dispose();
@@ -1236,6 +1322,77 @@ namespace UOX3SpawnEditor
             return Color.Orange;
         }
 
+        private void InitializeStaticFilterUI()
+        {
+            if (comboBoxStaticFilter == null)
+                return;
+
+            if (UOMapBitmapLoader.CurrentStaticRenderFilter == UOMapBitmapLoader.StaticRenderFilter.HideTrees)
+                comboBoxStaticFilter.SelectedIndex = 1;
+            else
+                comboBoxStaticFilter.SelectedIndex = 0;
+        }
+
+        private void ApplyStaticFilterFromUI()
+        {
+            if (comboBoxStaticFilter == null || comboBoxStaticFilter.SelectedIndex < 0)
+                return;
+
+            if (comboBoxStaticFilter.SelectedIndex == 1)
+                UOMapBitmapLoader.SetStaticRenderFilter(UOMapBitmapLoader.StaticRenderFilter.HideTrees);
+            else
+                UOMapBitmapLoader.SetStaticRenderFilter(UOMapBitmapLoader.StaticRenderFilter.ShowAll);
+        }
+
+        private void ReloadRenderedWorldMapsFromCurrentSources()
+        {
+            if (worldMapPaths == null || worldMapPaths.Count == 0)
+                return;
+
+            Dictionary<int, string> existingMapPaths = new Dictionary<int, string>(worldMapPaths);
+
+            foreach (KeyValuePair<int, Image> entry in worldMaps.ToList())
+            {
+                if (entry.Value != null)
+                    entry.Value.Dispose();
+            }
+
+            worldMaps.Clear();
+
+            foreach (KeyValuePair<int, string> entry in existingMapPaths)
+            {
+                if (string.IsNullOrWhiteSpace(entry.Value) || !File.Exists(entry.Value))
+                    continue;
+
+                if (UOMapBitmapLoader.IsSupportedMapDataFile(entry.Value))
+                {
+                    string clientFolderPath = Path.GetDirectoryName(entry.Value);
+                    string radarColorPath = string.IsNullOrWhiteSpace(clientFolderPath)
+                        ? string.Empty
+                        : Path.Combine(clientFolderPath, "radarcol.mul");
+
+                    if (!File.Exists(radarColorPath))
+                        continue;
+
+                    Bitmap renderedBitmap = UOMapBitmapLoader.LoadMapBitmap(entry.Value, radarColorPath, entry.Key, 3000);
+                    if (renderedBitmap != null)
+                        worldMaps[entry.Key] = renderedBitmap;
+                }
+                else
+                {
+                    worldMaps[entry.Key] = Image.FromFile(entry.Value);
+                }
+            }
+
+            if (worldMaps.ContainsKey(currentWorld))
+                SetCurrentWorldImage(currentWorld);
+            else if (worldMaps.Count > 0)
+                SetCurrentWorldImage(worldMaps.Keys.Min());
+
+            pictureBox1.Invalidate();
+            SaveSettings();
+        }
+
         private void RebuildWorldMapSelector()
         {
             comboBoxWorlds.Items.Clear();
@@ -1265,6 +1422,51 @@ namespace UOX3SpawnEditor
 
         private void openToolStripMenuItem_Click(object sender, EventArgs e)
         {
+            DialogResult sourceChoice = MessageBox.Show(
+                "Load maps from a UO client data folder?\n\nYes = Load map#.mul + radarcol.mul\nNo = Load a single image file\nCancel = Do nothing",
+                "Open Map Source",
+                MessageBoxButtons.YesNoCancel,
+                MessageBoxIcon.Question
+            );
+
+            if (sourceChoice == DialogResult.Cancel)
+                return;
+
+            if (sourceChoice == DialogResult.Yes)
+            {
+                using (FolderBrowserDialog folderDialog = new FolderBrowserDialog())
+                {
+                    folderDialog.Description = "Select UO client folder with map#.mul or map#LegacyMUL.uop and radarcol.mul";
+
+                    string initialFolder = worldMapPaths.Values
+                        .Where(path => !string.IsNullOrWhiteSpace(path) && File.Exists(path))
+                        .Select(path => Path.GetDirectoryName(path))
+                        .FirstOrDefault(path => !string.IsNullOrWhiteSpace(path) && Directory.Exists(path));
+
+                    if (!string.IsNullOrWhiteSpace(initialFolder))
+                        folderDialog.SelectedPath = initialFolder;
+
+                    if (folderDialog.ShowDialog() != DialogResult.OK)
+                        return;
+
+                    try
+                    {
+                        SetLoadingState(true, "Rendering UO map files...", 0, 1, true);
+                        LoadUOClientMapsFromFolder(folderDialog.SelectedPath);
+                    }
+                    catch (Exception ex)
+                    {
+                        MessageBox.Show("Failed to load UO client maps:\n" + ex.Message, "Load UO Client Maps", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    }
+                    finally
+                    {
+                        SetLoadingState(false, string.Empty, 0, 1, false);
+                    }
+                }
+
+                return;
+            }
+
             using (OpenFileDialog openDialog = new OpenFileDialog())
             {
                 openDialog.Filter = "Map Images|*.bmp;*.png;*.jpg";
@@ -1282,13 +1484,7 @@ namespace UOX3SpawnEditor
                 if (!int.TryParse(input, out worldNum))
                     return;
 
-                Image mapImage = Image.FromFile(openDialog.FileName);
-                worldMaps[worldNum] = mapImage;
-                worldMapPaths[worldNum] = openDialog.FileName;
-
-                currentWorld = worldNum;
-                originalImage = mapImage as Bitmap;
-
+                LoadWorldMapImage(worldNum, openDialog.FileName);
                 RebuildWorldMapSelector();
                 UpdateSpawnRegionListUI();
                 pictureBox1.Invalidate();
@@ -1302,13 +1498,7 @@ namespace UOX3SpawnEditor
             if (selectedWorld == null)
                 return;
 
-            currentWorld = selectedWorld.ID;
-
-            if (worldMaps.ContainsKey(currentWorld))
-            {
-                pictureBox1.Image = worldMaps[currentWorld];
-                originalImage = worldMaps[currentWorld] as Bitmap;
-            }
+            SetCurrentWorldImage(selectedWorld.ID);
 
             SelectWorldFilterItem(currentWorld);
             UpdateSpawnRegionListUI();
@@ -3081,11 +3271,7 @@ namespace UOX3SpawnEditor
                 comboBoxWorlds.SelectedItem = matchingWorld;
             else
             {
-                if (worldMaps.ContainsKey(currentWorld))
-                {
-                    pictureBox1.Image = worldMaps[currentWorld];
-                    originalImage = worldMaps[currentWorld] as Bitmap;
-                }
+                SetCurrentWorldImage(currentWorld);
 
                 UpdateSpawnRegionListUI();
                 pictureBox1.Invalidate();
@@ -4650,6 +4836,12 @@ namespace UOX3SpawnEditor
             Application.Exit();
         }
 
+        private void comboBoxStaticFilter_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            ApplyStaticFilterFromUI();
+            ReloadRenderedWorldMapsFromCurrentSources();
+        }
+
         private void helpToolStripMenuItem_Click(object sender, EventArgs e)
         {
             string helpText =
@@ -4677,11 +4869,14 @@ Right Click on a spawn region
   Rename, duplicate, delete, or edit tags
 
 File Menu
-  Open Map Image
+  Open Map Source
   Load Spawn File
   Save Spawn File
   New Spawn File
   Toggle Spawn Regions
+
+Open Map Source
+  Load a UO client folder with map.mul files and radarcol.mul, or load a single image file
 
 Theme Menu
   Switch between Light Mode and Dark Mode

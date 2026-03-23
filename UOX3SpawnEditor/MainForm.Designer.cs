@@ -61,6 +61,7 @@ namespace UOX3SpawnEditor
         private TextBox txtSelectedZ;
         private TextBox txtSelectedBounds;
         private TextBox txtSelectedRaw;
+        private ComboBox comboBoxStaticFilter;
 
         protected override void Dispose(bool disposing)
         {
@@ -154,7 +155,7 @@ namespace UOX3SpawnEditor
             });
             this.fileToolStripMenuItem.Text = "File";
 
-            this.openToolStripMenuItem.Text = "Open Map Image";
+            this.openToolStripMenuItem.Text = "Open Map Source";
             this.openToolStripMenuItem.Click += new EventHandler(this.openToolStripMenuItem_Click);
 
             this.loadRegionsToolStripMenuItem.Text = "Load Spawn File";
@@ -304,6 +305,24 @@ namespace UOX3SpawnEditor
             ToolStripControlHost worldSelectorHost = new ToolStripControlHost(this.comboBoxWorlds);
             worldSelectorHost.Margin = new Padding(10, 0, 0, 0);
             this.toolStrip1.Items.Add(worldSelectorHost);
+
+            this.comboBoxStaticFilter = new ComboBox();
+            this.comboBoxStaticFilter.DropDownStyle = ComboBoxStyle.DropDownList;
+            this.comboBoxStaticFilter.Width = 130;
+            this.comboBoxStaticFilter.Items.AddRange(new object[]
+            {
+                "Show All Statics",
+                "Hide Trees"
+            });
+            this.comboBoxStaticFilter.SelectedIndexChanged += new EventHandler(this.comboBoxStaticFilter_SelectedIndexChanged);
+
+            ToolStripLabel staticFilterLabel = new ToolStripLabel();
+            staticFilterLabel.Text = "Statics:";
+            this.toolStrip1.Items.Add(staticFilterLabel);
+
+            ToolStripControlHost staticFilterHost = new ToolStripControlHost(this.comboBoxStaticFilter);
+            staticFilterHost.Margin = new Padding(10, 0, 0, 0);
+            this.toolStrip1.Items.Add(staticFilterHost);
 
             // panelRegionSidebar
             this.txtRegionSearch.Dock = DockStyle.Top;
