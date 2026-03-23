@@ -38,14 +38,13 @@ namespace UOX3SpawnEditor
         private TableLayoutPanel mainLayout;
         private ContextMenuStrip regionContextMenu;
         private ToolStripMenuItem editTagsMenuItem;
+        private ToolStripMenuItem copyToWorldMenuItem;
         private ToolStripMenuItem compareTagsMenuItem;
         private ComboBox comboBoxRegionGroups;
         private ComboBox comboWorldFilter;
         private ComboBox comboBoxWorlds;
         private FlowLayoutPanel panelSidebarButtons;
-        private Button buttonHideAll;
-        private Button buttonShowAll;
-        private Button buttonShowOnlySelected;
+        private Button buttonVisibilityMenu;
         private ToolStripButton undoToolStripButton;
         private ToolStripMenuItem undoToolStripMenuItem;
         private Panel panelSelectionDetails;
@@ -62,6 +61,11 @@ namespace UOX3SpawnEditor
         private TextBox txtSelectedBounds;
         private TextBox txtSelectedRaw;
         private ComboBox comboBoxStaticFilter;
+        private Button buttonGoToSelected;
+        private ContextMenuStrip visibilityContextMenu;
+        private ToolStripMenuItem visibilityShowAllMenuItem;
+        private ToolStripMenuItem visibilityHideAllMenuItem;
+        private ToolStripMenuItem visibilityShowSelectedOnlyMenuItem;
 
         protected override void Dispose(bool disposing)
         {
@@ -99,9 +103,12 @@ namespace UOX3SpawnEditor
             this.undoToolStripMenuItem = new ToolStripMenuItem();
 
             this.panelSidebarButtons = new FlowLayoutPanel();
-            this.buttonHideAll = new Button();
-            this.buttonShowAll = new Button();
-            this.buttonShowOnlySelected = new Button();
+            this.buttonVisibilityMenu = new Button();
+            this.visibilityContextMenu = new ContextMenuStrip();
+            this.visibilityShowAllMenuItem = new ToolStripMenuItem();
+            this.visibilityHideAllMenuItem = new ToolStripMenuItem();
+            this.visibilityShowSelectedOnlyMenuItem = new ToolStripMenuItem();
+            this.buttonGoToSelected = new Button();
 
             this.toolStrip1 = new ToolStrip();
             this.zoomInToolStripButton = new ToolStripButton();
@@ -263,21 +270,32 @@ namespace UOX3SpawnEditor
             this.panelSidebarButtons.WrapContents = false;
             this.panelSidebarButtons.Padding = new Padding(3, 3, 3, 3);
 
-            this.buttonHideAll.Text = "Hide All";
-            this.buttonHideAll.Width = 80;
-            this.buttonHideAll.Click += new EventHandler(this.buttonHideAll_Click);
+            this.visibilityShowAllMenuItem.Text = "Show All";
+            this.visibilityShowAllMenuItem.Click += new EventHandler(this.visibilityShowAllMenuItem_Click);
 
-            this.buttonShowAll.Text = "Show All";
-            this.buttonShowAll.Width = 80;
-            this.buttonShowAll.Click += new EventHandler(this.buttonShowAll_Click);
+            this.visibilityHideAllMenuItem.Text = "Hide All";
+            this.visibilityHideAllMenuItem.Click += new EventHandler(this.visibilityHideAllMenuItem_Click);
 
-            this.buttonShowOnlySelected.Text = "Show Only";
-            this.buttonShowOnlySelected.Width = 80;
-            this.buttonShowOnlySelected.Click += new EventHandler(this.buttonShowOnlySelected_Click);
+            this.visibilityShowSelectedOnlyMenuItem.Text = "Show Selected Only";
+            this.visibilityShowSelectedOnlyMenuItem.Click += new EventHandler(this.visibilityShowSelectedOnlyMenuItem_Click);
 
-            this.panelSidebarButtons.Controls.Add(this.buttonHideAll);
-            this.panelSidebarButtons.Controls.Add(this.buttonShowAll);
-            this.panelSidebarButtons.Controls.Add(this.buttonShowOnlySelected);
+            this.visibilityContextMenu.Items.AddRange(new ToolStripItem[]
+            {
+                this.visibilityShowAllMenuItem,
+                this.visibilityHideAllMenuItem,
+                this.visibilityShowSelectedOnlyMenuItem
+            });
+
+            this.buttonVisibilityMenu.Text = "Visibility";
+            this.buttonVisibilityMenu.Width = 110;
+            this.buttonVisibilityMenu.Click += new EventHandler(this.buttonVisibilityMenu_Click);
+
+            this.buttonGoToSelected.Text = "Go To";
+            this.buttonGoToSelected.Width = 70;
+            this.buttonGoToSelected.Click += new EventHandler(this.buttonGoToSelected_Click);
+
+            this.panelSidebarButtons.Controls.Add(this.buttonVisibilityMenu);
+            this.panelSidebarButtons.Controls.Add(this.buttonGoToSelected);
 
             this.comboBoxRegionGroups = new ComboBox();
             this.comboBoxRegionGroups.DropDownStyle = ComboBoxStyle.DropDownList;
@@ -342,11 +360,13 @@ namespace UOX3SpawnEditor
 
             this.regionContextMenu = new ContextMenuStrip();
             this.editTagsMenuItem = new ToolStripMenuItem("Edit Tags", null, editTagsMenuItem_Click);
+            this.copyToWorldMenuItem = new ToolStripMenuItem("Copy To World...", null, copyToWorldMenuItem_Click);
             this.compareTagsMenuItem = new ToolStripMenuItem("Compare With...", null, compareTagsMenuItem_Click);
 
             this.regionContextMenu.Items.AddRange(new ToolStripItem[] {
-                this.editTagsMenuItem,
-                this.compareTagsMenuItem
+            this.editTagsMenuItem,
+            this.copyToWorldMenuItem,
+            this.compareTagsMenuItem
             });
 
             this.checkedListBoxRegions.ContextMenuStrip = this.regionContextMenu;

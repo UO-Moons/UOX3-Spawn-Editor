@@ -45,6 +45,13 @@ namespace UOX3SpawnEditor
         private ToolStripStatusLabel loadingStatusLabel;
         private ToolStripProgressBar loadingProgressBar;
         private AppTheme currentTheme = AppTheme.Dark;
+        private Timer edgePanTimer;
+        private Point lastMapMousePosition = Point.Empty;
+        private bool mouseOverMap = false;
+        private bool edgePanEnabled = true;
+        private const int edgePanMargin = 24;
+        private const int edgePanSpeed = 18;
+        private const int mapPanMargin = 120;
 
         private const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
 
@@ -210,6 +217,14 @@ namespace UOX3SpawnEditor
             pictureBox1.MouseWheel += pictureBox1_MouseWheel;
             pictureBox1.Paint += pictureBox1_Paint;
             pictureBox1.SizeMode = PictureBoxSizeMode.Zoom;
+
+            pictureBox1.MouseEnter += pictureBox1_MouseEnter;
+            pictureBox1.MouseLeave += pictureBox1_MouseLeave;
+
+            edgePanTimer = new Timer();
+            edgePanTimer.Interval = 16;
+            edgePanTimer.Tick += edgePanTimer_Tick;
+            edgePanTimer.Start();
 
             this.KeyPreview = true;
             this.KeyDown += MainForm_KeyDown;
@@ -1507,18 +1522,12 @@ namespace UOX3SpawnEditor
 
         private void zoomInButton_Click(object sender, EventArgs e)
         {
-            zoomFactor += 0.1f;
-            ClampZoom();
-            UpdateZoomUI();
-            pictureBox1.Invalidate();
+            SetZoomAroundScreenPoint(zoomFactor + 0.1f, GetPictureCenterScreenPoint());
         }
 
         private void zoomOutButton_Click(object sender, EventArgs e)
         {
-            zoomFactor -= 0.1f;
-            ClampZoom();
-            UpdateZoomUI();
-            pictureBox1.Invalidate();
+            SetZoomAroundScreenPoint(zoomFactor - 0.1f, GetPictureCenterScreenPoint());
         }
 
         private void zoomComboBox_SelectedIndexChanged(object sender, EventArgs e)
@@ -1532,9 +1541,7 @@ namespace UOX3SpawnEditor
             if (!float.TryParse(selected, out parsedZoom))
                 return;
 
-            zoomFactor = parsedZoom;
-            ClampZoom();
-            pictureBox1.Invalidate();
+            SetZoomAroundScreenPoint(parsedZoom, GetPictureCenterScreenPoint());
         }
 
         private void ClampZoom()
@@ -3449,6 +3456,9 @@ namespace UOX3SpawnEditor
             if (originalImage == null)
                 return;
 
+            lastMapMousePosition = e.Location;
+            mouseOverMap = true;
+
             if (isCreatingRegion)
             {
                 PointF start = ScreenToMapCoords(regionDragStart);
@@ -3563,6 +3573,7 @@ namespace UOX3SpawnEditor
                 panOffset.X += e.X - mouseDownPos.X;
                 panOffset.Y += e.Y - mouseDownPos.Y;
                 mouseDownPos = e.Location;
+                ClampPanOffset();
                 pictureBox1.Invalidate();
                 return;
             }
@@ -3579,6 +3590,90 @@ namespace UOX3SpawnEditor
             }
         }
 
+        private void ClampPanOffset()
+        {
+            if (originalImage == null || pictureBox1.ClientSize.Width <= 0 || pictureBox1.ClientSize.Height <= 0)
+                return;
+
+            Size currentWorldSize = GetCurrentWorldDimensions();
+            float scaledMapWidth = ((float)originalImage.Width / currentWorldSize.Width) * currentWorldSize.Width * zoomFactor;
+            float scaledMapHeight = ((float)originalImage.Height / currentWorldSize.Height) * currentWorldSize.Height * zoomFactor;
+
+            int viewportWidth = pictureBox1.ClientSize.Width;
+            int viewportHeight = pictureBox1.ClientSize.Height;
+
+            int minPanX;
+            int maxPanX;
+            int minPanY;
+            int maxPanY;
+
+            if (scaledMapWidth <= viewportWidth)
+            {
+                int centeredPanX = (int)((viewportWidth - scaledMapWidth) / 2f);
+                minPanX = centeredPanX - mapPanMargin;
+                maxPanX = centeredPanX + mapPanMargin;
+            }
+            else
+            {
+                minPanX = (int)(viewportWidth - scaledMapWidth) - mapPanMargin;
+                maxPanX = mapPanMargin;
+            }
+
+            if (scaledMapHeight <= viewportHeight)
+            {
+                int centeredPanY = (int)((viewportHeight - scaledMapHeight) / 2f);
+                minPanY = centeredPanY - mapPanMargin;
+                maxPanY = centeredPanY + mapPanMargin;
+            }
+            else
+            {
+                minPanY = (int)(viewportHeight - scaledMapHeight) - mapPanMargin;
+                maxPanY = mapPanMargin;
+            }
+
+            int clampedX = Math.Max(minPanX, Math.Min(maxPanX, panOffset.X));
+            int clampedY = Math.Max(minPanY, Math.Min(maxPanY, panOffset.Y));
+
+            panOffset = new Point(clampedX, clampedY);
+        }
+
+        private void edgePanTimer_Tick(object sender, EventArgs e)
+        {
+            if (!edgePanEnabled || !mouseOverMap || originalImage == null)
+                return;
+
+            if (isPanning || isMovingRegion || isResizing || isCreatingRegion)
+                return;
+
+            if (lastMapMousePosition == Point.Empty)
+                return;
+
+            int deltaX = 0;
+            int deltaY = 0;
+
+            if (lastMapMousePosition.X <= edgePanMargin)
+                deltaX = edgePanMargin - lastMapMousePosition.X;
+            else if (lastMapMousePosition.X >= pictureBox1.ClientSize.Width - edgePanMargin)
+                deltaX = -(lastMapMousePosition.X - (pictureBox1.ClientSize.Width - edgePanMargin));
+
+            if (lastMapMousePosition.Y <= edgePanMargin)
+                deltaY = edgePanMargin - lastMapMousePosition.Y;
+            else if (lastMapMousePosition.Y >= pictureBox1.ClientSize.Height - edgePanMargin)
+                deltaY = -(lastMapMousePosition.Y - (pictureBox1.ClientSize.Height - edgePanMargin));
+
+            if (deltaX == 0 && deltaY == 0)
+                return;
+
+            panOffset = new Point(
+                panOffset.X + Math.Sign(deltaX) * Math.Max(4, Math.Abs(deltaX) / 2),
+                panOffset.Y + Math.Sign(deltaY) * Math.Max(4, Math.Abs(deltaY) / 2)
+            );
+
+            ClampPanOffset();
+
+            pictureBox1.Invalidate();
+        }
+
         private void pictureBox1_MouseUp(object sender, MouseEventArgs e)
         {
             if (isCreatingRegion)
@@ -3588,28 +3683,21 @@ namespace UOX3SpawnEditor
 
                 if (newRegionRect.Width > 0 && newRegionRect.Height > 0)
                 {
-                    PushUndo();
-
-                    SpawnRegion spawnRegion = new SpawnRegion();
-                    spawnRegion.RegionNum = GetNextRegionNumber();
-                    spawnRegion.Name = "New Spawn Region";
-                    spawnRegion.World = currentWorld;
-                    spawnRegion.Bounds.Add(newRegionRect);
-
-                    string targetFilePath = GetActiveSpawnFilePathForCurrentWorld();
+                    string targetFilePath = PromptForTargetSpawnFile(currentWorld);
 
                     if (string.IsNullOrWhiteSpace(targetFilePath))
                     {
-                        MessageBox.Show(
-                            "No target spawn file is set for this world.\nCreate a new spawn file first.",
-                            "New Spawn Region",
-                            MessageBoxButtons.OK,
-                            MessageBoxIcon.Information
-                        );
                         pictureBox1.Invalidate();
                         return;
                     }
 
+                    PushUndo();
+
+                    SpawnRegion spawnRegion = new SpawnRegion();
+                    spawnRegion.RegionNum = GetNextRegionNumberForFile(targetFilePath);
+                    spawnRegion.Name = "New Spawn Region";
+                    spawnRegion.World = currentWorld;
+                    spawnRegion.Bounds.Add(newRegionRect);
                     spawnRegion.SourceFilePath = targetFilePath;
 
                     if (!File.Exists(spawnRegion.SourceFilePath))
@@ -3625,6 +3713,7 @@ namespace UOX3SpawnEditor
 
                     PopulateSpawnGroups();
                     UpdateSpawnRegionListUI();
+                    UpdateSelectedRegionDetails();
                     SaveSettings();
                 }
 
@@ -3672,14 +3761,25 @@ namespace UOX3SpawnEditor
 
         private void pictureBox1_MouseWheel(object sender, MouseEventArgs e)
         {
-            if (e.Delta > 0)
-                zoomFactor += 0.1f;
-            else
-                zoomFactor -= 0.1f;
+            float newZoomFactor = zoomFactor;
 
-            ClampZoom();
-            UpdateZoomUI();
-            pictureBox1.Invalidate();
+            if (e.Delta > 0)
+                newZoomFactor += 0.1f;
+            else
+                newZoomFactor -= 0.1f;
+
+            SetZoomAroundScreenPoint(newZoomFactor, e.Location);
+        }
+
+        private void pictureBox1_MouseEnter(object sender, EventArgs e)
+        {
+            mouseOverMap = true;
+        }
+
+        private void pictureBox1_MouseLeave(object sender, EventArgs e)
+        {
+            mouseOverMap = false;
+            lastMapMousePosition = Point.Empty;
         }
 
         private int GetNextRegionNumber()
@@ -3690,12 +3790,28 @@ namespace UOX3SpawnEditor
             return spawnRegions.Max(region => region.RegionNum) + 1;
         }
 
+        private int GetNextRegionNumberForFile(string targetFilePath)
+        {
+            if (string.IsNullOrWhiteSpace(targetFilePath))
+                return GetNextRegionNumber();
+
+            List<SpawnRegion> regionsInFile = spawnRegions
+                .Where(region => string.Equals(region.SourceFilePath, targetFilePath, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
+            if (regionsInFile.Count == 0)
+                return 1;
+
+            return regionsInFile.Max(region => region.RegionNum) + 1;
+        }
+
         private void ShowPictureRegionContextMenu(Point location)
         {
             ContextMenuStrip menu = new ContextMenuStrip();
             ApplyThemeToContextMenu(menu);
             menu.Items.Add("Edit Tags", null, (menuSender, menuArgs) => ShowSpawnRegionEditor(selectedSpawnRegion));
             menu.Items.Add("Duplicate", null, (menuSender, menuArgs) => DuplicateSelectedSpawnRegion());
+            menu.Items.Add("Copy To World...", null, (menuSender, menuArgs) => CopySelectedSpawnRegionToWorld());
             menu.Items.Add("Rename", null, (menuSender, menuArgs) => RenameSelectedSpawnRegion());
             menu.Items.Add("Delete", null, (menuSender, menuArgs) => DeleteSelectedSpawnRegion());
             menu.Show(pictureBox1, location);
@@ -4324,6 +4440,22 @@ namespace UOX3SpawnEditor
                 if (!isPanning)
                     pictureBox1.Cursor = Cursors.Hand;
             }
+
+            if (e.KeyCode == Keys.E)
+            {
+                edgePanEnabled = !edgePanEnabled;
+            }
+
+            if (e.KeyCode == Keys.Home)
+            {
+                panOffset = new Point(0, 0);
+                zoomFactor = 1.0f;
+                ClampPanOffset();
+                UpdateZoomUI();
+                pictureBox1.Invalidate();
+                e.Handled = true;
+                return;
+            }
         }
 
         private void MainForm_KeyUp(object sender, KeyEventArgs e)
@@ -4349,6 +4481,44 @@ namespace UOX3SpawnEditor
             float y = (screenPoint.Y - panOffset.Y) / zoomFactor / scaleY;
 
             return new PointF(x, y);
+        }
+
+        private void SetZoomAroundScreenPoint(float newZoomFactor, Point anchorScreenPoint)
+        {
+            if (originalImage == null)
+                return;
+
+            float oldZoomFactor = zoomFactor;
+            if (oldZoomFactor <= 0f)
+                oldZoomFactor = 0.1f;
+
+            Size currentWorldSize = GetCurrentWorldDimensions();
+            float baseScaleX = (float)originalImage.Width / currentWorldSize.Width;
+            float baseScaleY = (float)originalImage.Height / currentWorldSize.Height;
+
+            float mapX = (anchorScreenPoint.X - panOffset.X) / (oldZoomFactor * baseScaleX);
+            float mapY = (anchorScreenPoint.Y - panOffset.Y) / (oldZoomFactor * baseScaleY);
+
+            zoomFactor = newZoomFactor;
+            ClampZoom();
+
+            panOffset = new Point(
+                (int)(anchorScreenPoint.X - (mapX * baseScaleX * zoomFactor)),
+                (int)(anchorScreenPoint.Y - (mapY * baseScaleY * zoomFactor))
+            );
+
+            ClampPanOffset();
+
+            UpdateZoomUI();
+            pictureBox1.Invalidate();
+        }
+
+        private Point GetPictureCenterScreenPoint()
+        {
+            return new Point(
+                pictureBox1.ClientSize.Width / 2,
+                pictureBox1.ClientSize.Height / 2
+            );
         }
 
         private void DrawResizeHandle(Graphics graphics, float centerX, float centerY, float handleSize)
@@ -4487,6 +4657,42 @@ namespace UOX3SpawnEditor
             UpdateSpawnRegionListUI();
             pictureBox1.Invalidate();
             SaveSettings();
+        }
+
+        private void buttonGoToSelected_Click(object sender, EventArgs e)
+        {
+            if (checkedListBoxRegions.SelectedIndex < 0 || checkedListBoxRegions.SelectedIndex >= visibleSpawnRegions.Count)
+                return;
+
+            SpawnRegion selectedVisibleRegion = visibleSpawnRegions[checkedListBoxRegions.SelectedIndex];
+            CenterViewOnSpawnRegion(selectedVisibleRegion);
+        }
+
+        private void buttonVisibilityMenu_Click(object sender, EventArgs e)
+        {
+            if (visibilityContextMenu == null || buttonVisibilityMenu == null)
+                return;
+
+            ApplyThemeToContextMenu(visibilityContextMenu);
+            visibilityContextMenu.Show(
+                buttonVisibilityMenu,
+                new Point(0, buttonVisibilityMenu.Height)
+            );
+        }
+
+        private void visibilityShowAllMenuItem_Click(object sender, EventArgs e)
+        {
+            buttonShowAll_Click(sender, e);
+        }
+
+        private void visibilityHideAllMenuItem_Click(object sender, EventArgs e)
+        {
+            buttonHideAll_Click(sender, e);
+        }
+
+        private void visibilityShowSelectedOnlyMenuItem_Click(object sender, EventArgs e)
+        {
+            buttonShowOnlySelected_Click(sender, e);
         }
 
         private void undoToolStripButton_Click(object sender, EventArgs e)
@@ -4842,64 +5048,347 @@ namespace UOX3SpawnEditor
             ReloadRenderedWorldMapsFromCurrentSources();
         }
 
+        private void CenterViewOnSpawnRegion(SpawnRegion spawnRegion)
+        {
+            if (spawnRegion == null || originalImage == null || spawnRegion.Bounds == null || spawnRegion.Bounds.Count == 0)
+                return;
+
+            Rectangle combinedBounds = spawnRegion.Bounds[0];
+
+            for (int index = 1; index < spawnRegion.Bounds.Count; index++)
+                combinedBounds = Rectangle.Union(combinedBounds, spawnRegion.Bounds[index]);
+
+            Size currentWorldSize = GetCurrentWorldDimensions();
+            float scaleX = (float)originalImage.Width / currentWorldSize.Width;
+            float scaleY = (float)originalImage.Height / currentWorldSize.Height;
+
+            float regionCenterX = (combinedBounds.Left + (combinedBounds.Width / 2f)) * scaleX;
+            float regionCenterY = (combinedBounds.Top + (combinedBounds.Height / 2f)) * scaleY;
+
+            int newPanX = (int)((pictureBox1.ClientSize.Width / 2f) - (regionCenterX * zoomFactor));
+            int newPanY = (int)((pictureBox1.ClientSize.Height / 2f) - (regionCenterY * zoomFactor));
+
+            panOffset = new Point(newPanX, newPanY);
+
+            ClampPanOffset();
+            pictureBox1.Invalidate();
+        }
+
+        private void CopySelectedSpawnRegionToWorld()
+        {
+            if (selectedSpawnRegion == null)
+                return;
+
+            int targetWorld = PromptForTargetWorld(selectedSpawnRegion.World);
+            if (targetWorld < 0)
+                return;
+
+            bool scaleBounds = false;
+
+            Size sourceWorldSize = worldMapDimensions.ContainsKey(selectedSpawnRegion.World)
+                ? worldMapDimensions[selectedSpawnRegion.World]
+                : new Size(7168, 4096);
+
+            Size targetWorldSize = worldMapDimensions.ContainsKey(targetWorld)
+                ? worldMapDimensions[targetWorld]
+                : new Size(7168, 4096);
+
+            bool sameWorldSize = sourceWorldSize.Width == targetWorldSize.Width &&
+                                 sourceWorldSize.Height == targetWorldSize.Height;
+
+            if (!sameWorldSize)
+            {
+                DialogResult scaleResult = MessageBox.Show(
+                    "The target world uses different map dimensions.\n\n" +
+                    "Yes = Scale bounds to fit target world\n" +
+                    "No = Keep exact coordinates\n" +
+                    "Cancel = Do nothing",
+                    "Copy To World",
+                    MessageBoxButtons.YesNoCancel,
+                    MessageBoxIcon.Question
+                );
+
+                if (scaleResult == DialogResult.Cancel)
+                    return;
+
+                scaleBounds = (scaleResult == DialogResult.Yes);
+            }
+
+            string sourceRegionName = selectedSpawnRegion.Name;
+            string targetFilePath = PromptForTargetSpawnFile(targetWorld);
+
+            if (string.IsNullOrWhiteSpace(targetFilePath))
+                return;
+
+            PushUndo();
+
+            SpawnRegion copiedRegion = selectedSpawnRegion.Clone();
+            copiedRegion.RegionNum = GetNextRegionNumberForFile(targetFilePath);
+            copiedRegion.Name = selectedSpawnRegion.Name + " Copy";
+            copiedRegion.World = targetWorld;
+            copiedRegion.SourceFilePath = targetFilePath;
+
+            if (scaleBounds)
+            {
+                float scaleX = (float)targetWorldSize.Width / sourceWorldSize.Width;
+                float scaleY = (float)targetWorldSize.Height / sourceWorldSize.Height;
+
+                copiedRegion.Bounds = selectedSpawnRegion.Bounds
+                    .Select(rect => new Rectangle(
+                        (int)Math.Round(rect.X * scaleX),
+                        (int)Math.Round(rect.Y * scaleY),
+                        Math.Max(1, (int)Math.Round(rect.Width * scaleX)),
+                        Math.Max(1, (int)Math.Round(rect.Height * scaleY))
+                    ))
+                    .ToList();
+            }
+            else
+            {
+                copiedRegion.Bounds = selectedSpawnRegion.Bounds
+                    .Select(rect => new Rectangle(rect.X, rect.Y, rect.Width, rect.Height))
+                    .ToList();
+            }
+
+            copiedRegion.SyncTypedFieldsToTags();
+
+            spawnRegions.Add(copiedRegion);
+            activeSpawnFileByWorld[targetWorld] = targetFilePath;
+
+            if (currentWorld == targetWorld)
+            {
+                selectedSpawnRegion = copiedRegion;
+                selectedRect = copiedRegion.Bounds.Count > 0 ? copiedRegion.Bounds[0] : Rectangle.Empty;
+                UpdateSelectedRegionDetails();
+                UpdateSpawnRegionListUI();
+                checkedListBoxRegions.SelectedIndex = visibleSpawnRegions.IndexOf(copiedRegion);
+                pictureBox1.Invalidate();
+            }
+            else
+            {
+                UpdateSpawnRegionListUI();
+                pictureBox1.Invalidate();
+            }
+
+            SaveSettings();
+
+            MessageBox.Show(
+                "Copied spawn region '" + sourceRegionName + "' to World " + targetWorld +
+                " into file '" + Path.GetFileName(targetFilePath) + "'.",
+                "Copy To World",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information
+            );
+        }
+
+        private void copyToWorldMenuItem_Click(object sender, EventArgs e)
+        {
+            if (checkedListBoxRegions.SelectedIndex < 0 || checkedListBoxRegions.SelectedIndex >= visibleSpawnRegions.Count)
+                return;
+
+            selectedSpawnRegion = visibleSpawnRegions[checkedListBoxRegions.SelectedIndex];
+            selectedRect = selectedSpawnRegion.Bounds.Count > 0 ? selectedSpawnRegion.Bounds[0] : Rectangle.Empty;
+            UpdateSelectedRegionDetails();
+
+            CopySelectedSpawnRegionToWorld();
+        }
+
+        private string PromptForTargetSpawnFile(int targetWorld)
+        {
+            List<string> candidateFiles = spawnRegions
+                .Where(region => region.World == targetWorld && !string.IsNullOrWhiteSpace(region.SourceFilePath))
+                .Select(region => region.SourceFilePath)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(path => Path.GetFileName(path))
+                .ToList();
+
+            string activeFilePath = string.Empty;
+            activeSpawnFileByWorld.TryGetValue(targetWorld, out activeFilePath);
+
+            if (!string.IsNullOrWhiteSpace(activeFilePath) &&
+                File.Exists(activeFilePath) &&
+                !candidateFiles.Contains(activeFilePath, StringComparer.OrdinalIgnoreCase))
+            {
+                candidateFiles.Insert(0, activeFilePath);
+            }
+
+            if (candidateFiles.Count == 0)
+            {
+                MessageBox.Show(
+                    "No spawn files are available for World " + targetWorld + ".\nCreate a spawn file for that world first.",
+                    "Copy To World",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Information
+                );
+                return string.Empty;
+            }
+
+            Form picker = new Form();
+            ApplyThemeToDialog(picker);
+            picker.Text = "Select Target Spawn File";
+            picker.Width = 520;
+            picker.Height = 420;
+            picker.StartPosition = FormStartPosition.CenterParent;
+            picker.MinimizeBox = false;
+            picker.MaximizeBox = false;
+            picker.FormBorderStyle = FormBorderStyle.SizableToolWindow;
+
+            Label descriptionLabel = new Label();
+            descriptionLabel.Text = "Choose the target spawn file for World " + targetWorld + ".";
+            descriptionLabel.Left = 12;
+            descriptionLabel.Top = 12;
+            descriptionLabel.Width = 480;
+            descriptionLabel.Height = 20;
+
+            ListBox listBox = new ListBox();
+            listBox.Left = 12;
+            listBox.Top = 40;
+            listBox.Width = 480;
+            listBox.Height = 280;
+            listBox.HorizontalScrollbar = true;
+
+            foreach (string filePath in candidateFiles)
+            {
+                string displayName = Path.GetFileName(filePath);
+
+                if (!string.IsNullOrWhiteSpace(activeFilePath) &&
+                    string.Equals(filePath, activeFilePath, StringComparison.OrdinalIgnoreCase))
+                {
+                    displayName += "  [Active]";
+                }
+
+                listBox.Items.Add(new SpawnFileListItem
+                {
+                    FilePath = filePath,
+                    DisplayName = displayName
+                });
+            }
+
+            Button selectButton = new Button();
+            selectButton.Text = "Select";
+            selectButton.Width = 100;
+            selectButton.Height = 28;
+            selectButton.Left = 392;
+            selectButton.Top = 332;
+            selectButton.DialogResult = DialogResult.OK;
+
+            Button cancelButton = new Button();
+            cancelButton.Text = "Cancel";
+            cancelButton.Width = 100;
+            cancelButton.Height = 28;
+            cancelButton.Left = 284;
+            cancelButton.Top = 332;
+            cancelButton.DialogResult = DialogResult.Cancel;
+
+            picker.Controls.Add(descriptionLabel);
+            picker.Controls.Add(listBox);
+            picker.Controls.Add(selectButton);
+            picker.Controls.Add(cancelButton);
+
+            picker.AcceptButton = selectButton;
+            picker.CancelButton = cancelButton;
+
+            if (listBox.Items.Count > 0)
+                listBox.SelectedIndex = 0;
+
+            listBox.DoubleClick += delegate
+            {
+                if (listBox.SelectedItem != null)
+                    picker.DialogResult = DialogResult.OK;
+            };
+
+            if (picker.ShowDialog(this) != DialogResult.OK)
+                return string.Empty;
+
+            SpawnFileListItem selectedItem = listBox.SelectedItem as SpawnFileListItem;
+            if (selectedItem == null)
+                return string.Empty;
+
+            return selectedItem.FilePath;
+        }
+
+        private int PromptForTargetWorld(int currentRegionWorld)
+        {
+            Form picker = new Form();
+            ApplyThemeToDialog(picker);
+            picker.Text = "Copy To World";
+            picker.Width = 340;
+            picker.Height = 170;
+            picker.StartPosition = FormStartPosition.CenterParent;
+            picker.FormBorderStyle = FormBorderStyle.FixedDialog;
+            picker.MinimizeBox = false;
+            picker.MaximizeBox = false;
+
+            Label label = new Label();
+            label.Text = "Choose target world:";
+            label.Left = 12;
+            label.Top = 16;
+            label.Width = 280;
+
+            ComboBox worldComboBox = new ComboBox();
+            worldComboBox.Left = 12;
+            worldComboBox.Top = 42;
+            worldComboBox.Width = 300;
+            worldComboBox.DropDownStyle = ComboBoxStyle.DropDownList;
+
+            foreach (KeyValuePair<int, string> entry in worldNameMap.OrderBy(entry => entry.Key))
+            {
+                worldComboBox.Items.Add(new WorldItem
+                {
+                    ID = entry.Key,
+                    Name = entry.Key + " - " + entry.Value
+                });
+            }
+
+            for (int index = 0; index < worldComboBox.Items.Count; index++)
+            {
+                WorldItem worldItem = worldComboBox.Items[index] as WorldItem;
+                if (worldItem != null && worldItem.ID != currentRegionWorld)
+                {
+                    worldComboBox.SelectedIndex = index;
+                    break;
+                }
+            }
+
+            Button okButton = new Button();
+            okButton.Text = "Copy";
+            okButton.Width = 90;
+            okButton.Height = 28;
+            okButton.Left = 222;
+            okButton.Top = 82;
+            okButton.DialogResult = DialogResult.OK;
+
+            Button cancelButton = new Button();
+            cancelButton.Text = "Cancel";
+            cancelButton.Width = 90;
+            cancelButton.Height = 28;
+            cancelButton.Left = 124;
+            cancelButton.Top = 82;
+            cancelButton.DialogResult = DialogResult.Cancel;
+
+            picker.Controls.Add(label);
+            picker.Controls.Add(worldComboBox);
+            picker.Controls.Add(okButton);
+            picker.Controls.Add(cancelButton);
+
+            picker.AcceptButton = okButton;
+            picker.CancelButton = cancelButton;
+
+            if (picker.ShowDialog(this) != DialogResult.OK)
+                return -1;
+
+            WorldItem selectedWorld = worldComboBox.SelectedItem as WorldItem;
+            if (selectedWorld == null)
+                return -1;
+
+            return selectedWorld.ID;
+        }
+
         private void helpToolStripMenuItem_Click(object sender, EventArgs e)
         {
-            string helpText =
-            @"== UOX3 Spawn Editor Help ==
-
-SHIFT + Left Click + Drag
-  Create a new spawn region
-
-Left Click + Drag inside a region
-  Move selected spawn region rectangle
-
-Left Click on a resize handle
-  Resize selected spawn region rectangle
-
-Mouse Wheel
-  Zoom in or out
-
-Middle Mouse Drag
-  Pan map
-
-Space + Left Drag
-  Pan map
-
-Right Click on a spawn region
-  Rename, duplicate, delete, or edit tags
-
-File Menu
-  Open Map Source
-  Load Spawn File
-  Save Spawn File
-  New Spawn File
-  Toggle Spawn Regions
-
-Open Map Source
-  Load a UO client folder with map.mul files and radarcol.mul, or load a single image file
-
-Theme Menu
-  Switch between Light Mode and Dark Mode
-
-DELETE
-  Delete selected spawn region
-
-CTRL + SHIFT + N
-  Create a new spawn file for the current world
-
-CTRL + SHIFT + DELETE
-  Choose and delete a spawn file for the current world
-
-Sidebar
-  Shows visible spawn regions with checkboxes
-
-Toolbar Labels button
-  Cycle between selected labels, all labels, or no labels
-
-CTRL + Z
-  Undo last edit";
-
-            MessageBox.Show(helpText, "How to Use", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            using (HelpForm helpForm = new HelpForm(currentTheme == AppTheme.Dark))
+            {
+                helpForm.ShowDialog(this);
+            }
         }
     }
 }
