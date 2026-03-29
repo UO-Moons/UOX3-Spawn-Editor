@@ -253,14 +253,25 @@ namespace UOX3SpawnEditor
             writer.WriteLine("{");
 
             WriteTagIfPresent(writer, spawnRegion.Tags, "NAME");
-            WriteTagIfPresent(writer, spawnRegion.Tags, "WORLD");
-            WriteTagIfPresent(writer, spawnRegion.Tags, "INSTANCEID");
+
             WriteTagIfPresent(writer, spawnRegion.Tags, "NPC");
             WriteTagIfPresent(writer, spawnRegion.Tags, "NPCLIST");
             WriteTagIfPresent(writer, spawnRegion.Tags, "ITEM");
             WriteTagIfPresent(writer, spawnRegion.Tags, "ITEMLIST");
+
             WriteTagIfPresent(writer, spawnRegion.Tags, "MAXNPCS");
             WriteTagIfPresent(writer, spawnRegion.Tags, "MAXITEMS");
+
+            foreach (Rectangle rect in spawnRegion.Bounds)
+            {
+                writer.WriteLine("X1=" + rect.Left);
+                writer.WriteLine("Y1=" + rect.Top);
+                writer.WriteLine("X2=" + rect.Right);
+                writer.WriteLine("Y2=" + rect.Bottom);
+            }
+
+            WriteTagIfPresent(writer, spawnRegion.Tags, "WORLD");
+            WriteTagIfPresent(writer, spawnRegion.Tags, "INSTANCEID");
             WriteTagIfPresent(writer, spawnRegion.Tags, "MINTIME");
             WriteTagIfPresent(writer, spawnRegion.Tags, "MAXTIME");
             WriteTagIfPresent(writer, spawnRegion.Tags, "CALL");
@@ -294,14 +305,6 @@ namespace UOX3SpawnEditor
                 }
 
                 writer.WriteLine(key + "=" + tag.Value);
-            }
-
-            foreach (Rectangle rect in spawnRegion.Bounds)
-            {
-                writer.WriteLine("X1=" + rect.Left);
-                writer.WriteLine("Y1=" + rect.Top);
-                writer.WriteLine("X2=" + rect.Right);
-                writer.WriteLine("Y2=" + rect.Bottom);
             }
 
             writer.WriteLine("}");

@@ -398,6 +398,7 @@ namespace UOX3SpawnEditor
         private void ApplyLoadedSpawnRegions(List<SpawnRegion> loadedRegions, bool loadedFolder, string sourcePath)
         {
             spawnRegions = loadedRegions ?? new List<SpawnRegion>();
+            NormalizeAllSpawnRegionSources();
             selectedSpawnRegion = null;
             selectedRect = Rectangle.Empty;
 
@@ -421,6 +422,49 @@ namespace UOX3SpawnEditor
             pictureBox1.Invalidate();
             undoStack.Clear();
             UpdateUndoUI();
+        }
+
+
+        private int AddRegionNumberEditor(Panel panel, SpawnRegion spawnRegion, out TextBox regionNumberTextBox, int y)
+        {
+            Panel fieldPanel = new Panel();
+            fieldPanel.Location = new Point(10, y);
+            fieldPanel.Width = Math.Max(560, panel.ClientSize.Width - 40);
+            fieldPanel.Height = 70;
+            fieldPanel.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+            fieldPanel.Padding = new Padding(8, 6, 8, 6);
+            fieldPanel.BackColor = Color.White;
+            fieldPanel.BorderStyle = BorderStyle.FixedSingle;
+
+            Label keyLabel = new Label();
+            keyLabel.Text = "REGION ID";
+            keyLabel.Location = new Point(8, 6);
+            keyLabel.Width = fieldPanel.Width - 16;
+            keyLabel.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+            keyLabel.Font = new Font("Segoe UI", 9F, FontStyle.Bold);
+
+            Label descriptionLabel = new Label();
+            descriptionLabel.Text = "Unique spawn region number used in [REGIONSPAWN n].";
+            descriptionLabel.Location = new Point(8, 25);
+            descriptionLabel.Width = fieldPanel.Width - 16;
+            descriptionLabel.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+            descriptionLabel.ForeColor = Color.DimGray;
+            descriptionLabel.Font = new Font("Segoe UI", 8.25F, FontStyle.Regular);
+
+            regionNumberTextBox = new TextBox();
+            regionNumberTextBox.Name = "REGIONNUM";
+            regionNumberTextBox.Location = new Point(8, 44);
+            regionNumberTextBox.Width = fieldPanel.Width - 16;
+            regionNumberTextBox.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+            regionNumberTextBox.Font = new Font("Segoe UI", 9F, FontStyle.Regular);
+            regionNumberTextBox.Text = spawnRegion.RegionNum.ToString();
+
+            fieldPanel.Controls.Add(keyLabel);
+            fieldPanel.Controls.Add(descriptionLabel);
+            fieldPanel.Controls.Add(regionNumberTextBox);
+            panel.Controls.Add(fieldPanel);
+
+            return y + fieldPanel.Height + 8;
         }
 
         private async Task LoadSpawnFileAsync(string spawnFilePath)
@@ -3923,13 +3967,11 @@ namespace UOX3SpawnEditor
             tagEditor.Height = 760;
             tagEditor.StartPosition = FormStartPosition.CenterParent;
             tagEditor.MinimumSize = new Size(640, 620);
-            //tagEditor.BackColor = Color.WhiteSmoke;
 
             Panel panel = new Panel();
             panel.Dock = DockStyle.Fill;
             panel.AutoScroll = true;
             panel.Padding = new Padding(14, 14, 14, 14);
-            //panel.BackColor = Color.WhiteSmoke;
 
             Panel buttonPanel = new Panel();
             buttonPanel.Dock = DockStyle.Bottom;
@@ -3950,9 +3992,12 @@ namespace UOX3SpawnEditor
             cancelButton.Height = 28;
             cancelButton.Anchor = AnchorStyles.Right | AnchorStyles.Top;
             cancelButton.Location = new Point(buttonPanel.Width - 220, 10);
-            cancelButton.Click += (cancelSender, cancelArgs) => tagEditor.Close();
+            cancelButton.Click += delegate
+            {
+                tagEditor.Close();
+            };
 
-            buttonPanel.Resize += (resizeSender, resizeArgs) =>
+            buttonPanel.Resize += delegate
             {
                 saveButton.Location = new Point(buttonPanel.ClientSize.Width - saveButton.Width - 10, 10);
                 cancelButton.Location = new Point(saveButton.Left - cancelButton.Width - 8, 10);
@@ -3965,20 +4010,40 @@ namespace UOX3SpawnEditor
             tagEditor.Controls.Add(buttonPanel);
 
             Dictionary<string, TextBox> tagInputs = new Dictionary<string, TextBox>(StringComparer.OrdinalIgnoreCase);
+            TextBox regionNumberTextBox;
             int y = 0;
 
             string[] coreTagOrder = { "NAME", "WORLD", "INSTANCEID" };
-            string[] spawnSourceTagOrder = { "NPC", "NPCLIST", "ITEM", "ITEMLIST" };
             string[] spawnSettingsTagOrder = { "MAXNPCS", "MAXITEMS", "MINTIME", "MAXTIME", "CALL", "DEFZ", "PREFZ" };
             string[] advancedTagOrder = { "ONLYOUTSIDE", "FORCESPAWN", "ISSPAWNER", "ADDSCRIPT", "VALIDLANDPOS", "VALIDWATERPOS" };
 
-            y = AddEditorSection(panel, "Core Fields", "Main identifying values for the spawn region.", coreTagOrder, spawnRegion, tagInputs, y);
-            y = AddEditorSection(panel, "Spawn Source", "Pick the creature or item source used by this region.", spawnSourceTagOrder, spawnRegion, tagInputs, y);
+            y = AddEditorSectionHeader(panel, "Core Fields", "Main identifying values for the spawn region.", y);
+            y = AddRegionNumberEditor(panel, spawnRegion, out regionNumberTextBox, y);
+
+            foreach (string key in coreTagOrder)
+            {
+                string existingValue = string.Empty;
+                if (spawnRegion.Tags.ContainsKey(key))
+                    existingValue = spawnRegion.Tags[key];
+
+                string description = tagDescriptions.ContainsKey(key) ? tagDescriptions[key] : string.Empty;
+                y = AddEditorField(panel, key, description, existingValue, tagInputs, y, true);
+            }
+
+            y = AddEditorSectionHeader(panel, "Spawn Source", "Choose one source type and one raw section id.", y);
+            SpawnSourceEditorState spawnSourceEditor = AddSpawnSourceEditor(panel, spawnRegion, y);
+            y += 112;
+
             y = AddEditorSection(panel, "Spawn Settings", "Counts, timing, and preferred Z values.", spawnSettingsTagOrder, spawnRegion, tagInputs, y);
             y = AddEditorSection(panel, "Advanced Tags", "Optional behavior flags and extra script hooks.", advancedTagOrder, spawnRegion, tagInputs, y);
 
             List<KeyValuePair<string, string>> customTags = spawnRegion.Tags
-                .Where(tag => !tagDescriptions.ContainsKey(tag.Key.ToUpperInvariant()))
+                .Where(tag =>
+                    !tagDescriptions.ContainsKey(tag.Key.ToUpperInvariant()) &&
+                    !string.Equals(tag.Key, "NPC", StringComparison.OrdinalIgnoreCase) &&
+                    !string.Equals(tag.Key, "NPCLIST", StringComparison.OrdinalIgnoreCase) &&
+                    !string.Equals(tag.Key, "ITEM", StringComparison.OrdinalIgnoreCase) &&
+                    !string.Equals(tag.Key, "ITEMLIST", StringComparison.OrdinalIgnoreCase))
                 .OrderBy(tag => tag.Key)
                 .ToList();
 
@@ -3990,7 +4055,7 @@ namespace UOX3SpawnEditor
                     y = AddEditorField(panel, entry.Key.ToUpperInvariant(), "(Custom tag)", entry.Value, tagInputs, y, false);
             }
 
-            saveButton.Click += (saveSender, saveArgs) =>
+            saveButton.Click += delegate
             {
                 PushUndo();
 
@@ -4011,16 +4076,71 @@ namespace UOX3SpawnEditor
                 }
 
                 spawnRegion.SyncTagsToTypedFields();
+
+                string selectedTypeText = spawnSourceEditor.TypeComboBox.SelectedItem != null
+                    ? spawnSourceEditor.TypeComboBox.SelectedItem.ToString()
+                    : "None";
+
+                SpawnSourceType selectedSpawnSourceType = SpawnSourceType.None;
+
+                if (string.Equals(selectedTypeText, "NPC", StringComparison.OrdinalIgnoreCase))
+                    selectedSpawnSourceType = SpawnSourceType.NPC;
+                else if (string.Equals(selectedTypeText, "NPCLIST", StringComparison.OrdinalIgnoreCase))
+                    selectedSpawnSourceType = SpawnSourceType.NPCLIST;
+                else if (string.Equals(selectedTypeText, "ITEM", StringComparison.OrdinalIgnoreCase))
+                    selectedSpawnSourceType = SpawnSourceType.ITEM;
+                else if (string.Equals(selectedTypeText, "ITEMLIST", StringComparison.OrdinalIgnoreCase))
+                    selectedSpawnSourceType = SpawnSourceType.ITEMLIST;
+
+                ApplySpawnSourceToRegion(
+                    spawnRegion,
+                    selectedSpawnSourceType,
+                    spawnSourceEditor.ValueTextBox.Text
+                );
+
+                int parsedRegionNumber;
+                if (!int.TryParse(regionNumberTextBox.Text.Trim(), out parsedRegionNumber) || parsedRegionNumber <= 0)
+                {
+                    MessageBox.Show(
+                        "Region ID must be a valid number greater than 0.",
+                        "Invalid Region ID",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Warning
+                    );
+                    return;
+                }
+
+                SpawnRegion conflictingRegion = spawnRegions.FirstOrDefault(region =>
+                    region != spawnRegion &&
+                    region.World == spawnRegion.World &&
+                    region.RegionNum == parsedRegionNumber &&
+                    string.Equals(region.SourceFilePath, spawnRegion.SourceFilePath, StringComparison.OrdinalIgnoreCase));
+
+                if (conflictingRegion != null)
+                {
+                    MessageBox.Show(
+                        "Another spawn region in this file and world already uses Region ID " + parsedRegionNumber + ".",
+                        "Duplicate Region ID",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Warning
+                    );
+                    return;
+                }
+
+                spawnRegion.RegionNum = parsedRegionNumber;
+                spawnRegion.SyncTypedFieldsToTags();
+
                 if (spawnRegion == selectedSpawnRegion)
                     UpdateSelectedRegionDetails();
+
                 UpdateSpawnRegionListUI();
                 PopulateSpawnGroups();
                 pictureBox1.Invalidate();
                 SaveSettings();
                 tagEditor.Close();
             };
-            ApplyThemeToDialog(tagEditor);
 
+            ApplyThemeToDialog(tagEditor);
             tagEditor.ShowDialog(this);
         }
 
@@ -5304,6 +5424,281 @@ namespace UOX3SpawnEditor
                 return string.Empty;
 
             return selectedItem.FilePath;
+        }
+
+        private enum SpawnSourceType
+        {
+            None,
+            NPC,
+            NPCLIST,
+            ITEM,
+            ITEMLIST
+        }
+
+        private class SpawnSourceEditorState
+        {
+            public ComboBox TypeComboBox { get; set; }
+            public TextBox ValueTextBox { get; set; }
+            public Button BrowseButton { get; set; }
+        }
+
+        private string NormalizeSpawnSourceValue(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                return string.Empty;
+
+            string normalizedValue = value.Trim();
+
+            if (normalizedValue.StartsWith("NPC=", StringComparison.OrdinalIgnoreCase))
+                return normalizedValue.Substring(4).Trim();
+
+            if (normalizedValue.StartsWith("NPCLIST=", StringComparison.OrdinalIgnoreCase))
+                return normalizedValue.Substring(8).Trim();
+
+            if (normalizedValue.StartsWith("ITEM=", StringComparison.OrdinalIgnoreCase))
+                return normalizedValue.Substring(5).Trim();
+
+            if (normalizedValue.StartsWith("ITEMLIST=", StringComparison.OrdinalIgnoreCase))
+                return normalizedValue.Substring(9).Trim();
+
+            if (normalizedValue.StartsWith("NPC ", StringComparison.OrdinalIgnoreCase))
+                return normalizedValue.Substring(4).Trim();
+
+            if (normalizedValue.StartsWith("NPCLIST ", StringComparison.OrdinalIgnoreCase))
+                return normalizedValue.Substring(8).Trim();
+
+            if (normalizedValue.StartsWith("ITEM ", StringComparison.OrdinalIgnoreCase))
+                return normalizedValue.Substring(5).Trim();
+
+            if (normalizedValue.StartsWith("ITEMLIST ", StringComparison.OrdinalIgnoreCase))
+                return normalizedValue.Substring(9).Trim();
+
+            return normalizedValue;
+        }
+
+        private SpawnSourceType GetSpawnSourceTypeFromRegion(SpawnRegion spawnRegion)
+        {
+            if (spawnRegion == null)
+                return SpawnSourceType.None;
+
+            if (!string.IsNullOrWhiteSpace(spawnRegion.Npc))
+                return SpawnSourceType.NPC;
+
+            if (!string.IsNullOrWhiteSpace(spawnRegion.NpcList))
+                return SpawnSourceType.NPCLIST;
+
+            if (!string.IsNullOrWhiteSpace(spawnRegion.Item))
+                return SpawnSourceType.ITEM;
+
+            if (!string.IsNullOrWhiteSpace(spawnRegion.ItemList))
+                return SpawnSourceType.ITEMLIST;
+
+            return SpawnSourceType.None;
+        }
+
+        private string GetSpawnSourceValueFromRegion(SpawnRegion spawnRegion)
+        {
+            if (spawnRegion == null)
+                return string.Empty;
+
+            if (!string.IsNullOrWhiteSpace(spawnRegion.Npc))
+                return NormalizeSpawnSourceValue(spawnRegion.Npc);
+
+            if (!string.IsNullOrWhiteSpace(spawnRegion.NpcList))
+                return NormalizeSpawnSourceValue(spawnRegion.NpcList);
+
+            if (!string.IsNullOrWhiteSpace(spawnRegion.Item))
+                return NormalizeSpawnSourceValue(spawnRegion.Item);
+
+            if (!string.IsNullOrWhiteSpace(spawnRegion.ItemList))
+                return NormalizeSpawnSourceValue(spawnRegion.ItemList);
+
+            return string.Empty;
+        }
+
+        private void ApplySpawnSourceToRegion(SpawnRegion spawnRegion, SpawnSourceType spawnSourceType, string rawValue)
+        {
+            string normalizedValue = NormalizeSpawnSourceValue(rawValue);
+
+            spawnRegion.Npc = string.Empty;
+            spawnRegion.NpcList = string.Empty;
+            spawnRegion.Item = string.Empty;
+            spawnRegion.ItemList = string.Empty;
+
+            spawnRegion.Tags.Remove("NPC");
+            spawnRegion.Tags.Remove("NPCLIST");
+            spawnRegion.Tags.Remove("ITEM");
+            spawnRegion.Tags.Remove("ITEMLIST");
+
+            if (string.IsNullOrWhiteSpace(normalizedValue) || spawnSourceType == SpawnSourceType.None)
+                return;
+
+            switch (spawnSourceType)
+            {
+                case SpawnSourceType.NPC:
+                    spawnRegion.Npc = normalizedValue;
+                    break;
+                case SpawnSourceType.NPCLIST:
+                    spawnRegion.NpcList = normalizedValue;
+                    break;
+                case SpawnSourceType.ITEM:
+                    spawnRegion.Item = normalizedValue;
+                    break;
+                case SpawnSourceType.ITEMLIST:
+                    spawnRegion.ItemList = normalizedValue;
+                    break;
+            }
+        }
+
+        private SpawnSourceEditorState AddSpawnSourceEditor(Panel panel, SpawnRegion spawnRegion, int y)
+        {
+            Panel fieldPanel = new Panel();
+            fieldPanel.Location = new Point(10, y);
+            fieldPanel.Width = Math.Max(560, panel.ClientSize.Width - 40);
+            fieldPanel.Height = 104;
+            fieldPanel.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+            fieldPanel.Padding = new Padding(8, 6, 8, 6);
+            fieldPanel.BackColor = Color.White;
+            fieldPanel.BorderStyle = BorderStyle.FixedSingle;
+
+            Label keyLabel = new Label();
+            keyLabel.Text = "SPAWN SOURCE";
+            keyLabel.Location = new Point(8, 6);
+            keyLabel.Width = fieldPanel.Width - 16;
+            keyLabel.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+            keyLabel.Font = new Font("Segoe UI", 9F, FontStyle.Bold);
+
+            Label descriptionLabel = new Label();
+            descriptionLabel.Text = "Choose one source type and one raw section id value only.";
+            descriptionLabel.Location = new Point(8, 25);
+            descriptionLabel.Width = fieldPanel.Width - 16;
+            descriptionLabel.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+            descriptionLabel.ForeColor = Color.DimGray;
+            descriptionLabel.Font = new Font("Segoe UI", 8.25F, FontStyle.Regular);
+
+            ComboBox typeComboBox = new ComboBox();
+            typeComboBox.DropDownStyle = ComboBoxStyle.DropDownList;
+            typeComboBox.Left = 8;
+            typeComboBox.Top = 48;
+            typeComboBox.Width = 140;
+            typeComboBox.Items.Add("None");
+            typeComboBox.Items.Add("NPC");
+            typeComboBox.Items.Add("NPCLIST");
+            typeComboBox.Items.Add("ITEM");
+            typeComboBox.Items.Add("ITEMLIST");
+
+            TextBox valueTextBox = new TextBox();
+            valueTextBox.Left = 156;
+            valueTextBox.Top = 48;
+            valueTextBox.Width = fieldPanel.Width - 156 - 98 - 16;
+            valueTextBox.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+            valueTextBox.Font = new Font("Segoe UI", 9F, FontStyle.Regular);
+
+            Button browseButton = new Button();
+            browseButton.Text = "Browse...";
+            browseButton.Width = 90;
+            browseButton.Height = 24;
+            browseButton.Left = fieldPanel.Width - browseButton.Width - 8;
+            browseButton.Top = 46;
+            browseButton.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+
+            Label exampleLabel = new Label();
+            exampleLabel.Text = "Stored value is raw only, for example: animallist";
+            exampleLabel.Left = 8;
+            exampleLabel.Top = 76;
+            exampleLabel.Width = fieldPanel.Width - 16;
+            exampleLabel.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+            exampleLabel.ForeColor = Color.DimGray;
+            exampleLabel.Font = new Font("Segoe UI", 8.25F, FontStyle.Italic);
+
+            SpawnSourceType initialType = GetSpawnSourceTypeFromRegion(spawnRegion);
+            string initialValue = GetSpawnSourceValueFromRegion(spawnRegion);
+
+            if (initialType == SpawnSourceType.None)
+                typeComboBox.SelectedIndex = 0;
+            else if (initialType == SpawnSourceType.NPC)
+                typeComboBox.SelectedItem = "NPC";
+            else if (initialType == SpawnSourceType.NPCLIST)
+                typeComboBox.SelectedItem = "NPCLIST";
+            else if (initialType == SpawnSourceType.ITEM)
+                typeComboBox.SelectedItem = "ITEM";
+            else if (initialType == SpawnSourceType.ITEMLIST)
+                typeComboBox.SelectedItem = "ITEMLIST";
+
+            valueTextBox.Text = initialValue;
+
+            browseButton.Click += delegate
+            {
+                string selectedType = typeComboBox.SelectedItem != null ? typeComboBox.SelectedItem.ToString() : "None";
+                string selectedValue = string.Empty;
+
+                if (string.Equals(selectedType, "NPC", StringComparison.OrdinalIgnoreCase))
+                    selectedValue = PromptForNpcSelection(valueTextBox.Text.Trim());
+                else if (string.Equals(selectedType, "NPCLIST", StringComparison.OrdinalIgnoreCase))
+                    selectedValue = PromptForNpcListSelection(valueTextBox.Text.Trim());
+                else if (string.Equals(selectedType, "ITEM", StringComparison.OrdinalIgnoreCase))
+                    selectedValue = PromptForItemSelection(valueTextBox.Text.Trim());
+                else if (string.Equals(selectedType, "ITEMLIST", StringComparison.OrdinalIgnoreCase))
+                    selectedValue = PromptForItemListSelection(valueTextBox.Text.Trim());
+
+                if (!string.IsNullOrWhiteSpace(selectedValue))
+                    valueTextBox.Text = NormalizeSpawnSourceValue(selectedValue);
+            };
+
+            fieldPanel.Controls.Add(keyLabel);
+            fieldPanel.Controls.Add(descriptionLabel);
+            fieldPanel.Controls.Add(typeComboBox);
+            fieldPanel.Controls.Add(valueTextBox);
+            fieldPanel.Controls.Add(browseButton);
+            fieldPanel.Controls.Add(exampleLabel);
+            panel.Controls.Add(fieldPanel);
+
+            return new SpawnSourceEditorState
+            {
+                TypeComboBox = typeComboBox,
+                ValueTextBox = valueTextBox,
+                BrowseButton = browseButton
+            };
+        }
+
+        private void NormalizeAllSpawnRegionSources()
+        {
+            foreach (SpawnRegion spawnRegion in spawnRegions)
+            {
+                bool changed = false;
+
+                string normalizedNpc = NormalizeSpawnSourceValue(spawnRegion.Npc);
+                string normalizedNpcList = NormalizeSpawnSourceValue(spawnRegion.NpcList);
+                string normalizedItem = NormalizeSpawnSourceValue(spawnRegion.Item);
+                string normalizedItemList = NormalizeSpawnSourceValue(spawnRegion.ItemList);
+
+                if (!string.Equals(spawnRegion.Npc, normalizedNpc, StringComparison.Ordinal))
+                {
+                    spawnRegion.Npc = normalizedNpc;
+                    changed = true;
+                }
+
+                if (!string.Equals(spawnRegion.NpcList, normalizedNpcList, StringComparison.Ordinal))
+                {
+                    spawnRegion.NpcList = normalizedNpcList;
+                    changed = true;
+                }
+
+                if (!string.Equals(spawnRegion.Item, normalizedItem, StringComparison.Ordinal))
+                {
+                    spawnRegion.Item = normalizedItem;
+                    changed = true;
+                }
+
+                if (!string.Equals(spawnRegion.ItemList, normalizedItemList, StringComparison.Ordinal))
+                {
+                    spawnRegion.ItemList = normalizedItemList;
+                    changed = true;
+                }
+
+                if (changed)
+                    spawnRegion.SyncTypedFieldsToTags();
+            }
         }
 
         private int PromptForTargetWorld(int currentRegionWorld)
